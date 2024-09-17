@@ -1,6 +1,6 @@
 <button id="showSize" class="btn btn--primary btn--large ">Customize</button>
 
-<div id="input_data" class="shoulder-custom2">
+<div id="input_data" class="shoulder-custom2 disable_input">
   <style>
     .custom.form__label { margin-bottom: 0.6rem; }
     .field.custom { margin-top: 0; }
@@ -151,111 +151,85 @@
 </style>
 
 <script>
-   var custom_products;
-  document.getElementById('showSize').addEventListener('click', function() {
-      const formContainer = document.getElementById("input_data");
+  const CSV_URL = "https://cdn.shopify.com/s/files/1/0902/3514/2463/files/product_size_data_duplicate.csv?v=1726481736";
 
-      if(formContainer.classList.contains('disable_input')){
+  // Utility Functions
+  function sanitizeSelectorName(name) {
+    return name.replace(/[^a-zA-Z0-9_-]/g, '-')
+                .replace(/^-+|-+$/g, '')
+                .replace(/\s+/g, '-')
+                .toUpperCase();
+  }
 
-       formContainer.classList.remove('disable_input');
-       document.getElementById('showSize').classList.add('change_btn');
-       const selector = '.shoulder-custom2';
-       const selectorInput = selector + " input";
-       document.querySelectorAll(selector).forEach(el => {
-          console.log(selectorInput);
-          document.querySelector(selectorInput).setAttribute('form', '{{ 'product-form-' | append: section.id }}');
-          document.querySelectorAll('.hidden-input-fileupload').forEach(input => input.setAttribute('form', '{{ 'product-form-' | append: section.id }}'));
-        }
-      )
-      }
-      else{
-        formContainer.classList.add('disable_input');
-        document.getElementById('showSize').classList.remove('change_btn');
-          selector = 'shoulder-custom2';
-         document.querySelectorAll(selector).forEach(el => {
-         document.querySelector(selectorInput).setAttribute('form', '');
-         document.querySelectorAll('.hidden-input-fileupload').forEach(input => input.setAttribute('form', ''));
-        }
-      )
-      }
-  });
+  function toggleFormContainer() {
+    const formContainer = document.getElementById("input_data");
+    const showSizeButton = document.getElementById('showSize');
+    const isDisabled = formContainer.classList.toggle('disable_input');
+    showSizeButton.classList.toggle('change_btn', !isDisabled);
+
+  }
 
 
-    document.addEventListener('DOMContentLoaded', () => {
 
-        const checkCurrentOption = (custom_products) => {
-        console.log("custom_product:",custom_products);
-        const sanitizeSelectorName = name => name.replace(/[^a-zA-Z0-9_-]/g, '-').replace(/^-+|-+$/g, '').replace(/\s+/g, '-').toUpperCase();
-        const variantSelects = document.querySelector('variant-selects');
-        const currentValues = Array.from(variantSelects.querySelectorAll('select option[selected], fieldset input:checked')).map(el => el.value);
-
-        const optionValue = "custom";
-        const optionNumber = 2;
-        const required = false;
-        const selector = ".shoulder-" + optionValue + optionNumber;
-        const selectorInput = selector + " input";
-        const compareValue = currentValues[optionNumber - 1];
-        const finalValue = sanitizeSelectorName(compareValue);
-
-        for(const product of custom_products.slice(0, -1))
-          {
-            console.log(finalValue);
-            console.log(product[finalValue]);
-            if(product.body_measurement === 'Shoulder')
-            {
-                document.getElementById("shoulder").value = product[finalValue];
-            }
-            else if(product.body_measurement === 'Waist')
-            {
-                document.getElementById("wrist").value = product[finalValue];
-            }
-            else if(product.body_measurement === 'Hip')
-            {
-                document.getElementById("hips").value = product[finalValue];
-            }
-            else if(product.body_measurement === 'Chest')
-            {
-                document.getElementById("chest").value =  product[finalValue];
-            }
-
-          }
-        }
-
-       const handleurl = (csvText)=>{
-                     const rows = csvText.split("\n");
-              const headers = rows[0].split(",");
-              const json = rows.slice(1).map(row => {
-                  const values = row.split(",");
-                  const obj = {};
-                  headers.slice(1).forEach((header, index) => {
-                      obj[header] = values[index + 1];
-                  });
-                  return {
-                      body_measurement: values[0],
-                      ...obj
-                  };
-              });
-
-              return json;
-          }
-
-        const fetch_url = ()=>{
-          const csvUrl = "https://cdn.shopify.com/s/files/1/0902/3514/2463/files/product_size_data_duplicate.csv?v=1726481736";
-          var products;
-          fetch(csvUrl)
-              .then(response => response.text()).then((csvText) => {
-                  console.log("CSV Data:", csvText);
-                   products =   handleurl(csvText);
-                  console.log("product data:", products);
-                    checkCurrentOption(products);
-              }).catch(error => {
-                  console.error("Error fetching or parsing CSV:", error);
-              })
-
-
-        }
-
-      fetch_url();
-      document.querySelector(".product-variant-id").addEventListener('change',fetch_url);
+  function parseCSV(csvText) {
+    const rows = csvText.split("\n");
+    const headers = rows[0].split(",");
+    return rows.slice(1).map(row => {
+      const values = row.split(",");
+      const obj = {};
+      headers.slice(1).forEach((header, index) => {
+        obj[header] = values[index + 1];
+      });
+      return {
+        body_measurement: values[0],
+        ...obj
+      };
     });
+  }
+
+  function updateProductMeasurements(products, finalValue) {
+    const measurementMap = {
+      'Shoulder': 'shoulder',
+      'Waist': 'wrist',
+      'Hip': 'hips',
+      'Chest': 'chest'
+    };
+
+    products.slice(0, -1).forEach(product => {
+      const elementId = measurementMap[product.body_measurement];
+      if (elementId) {
+        document.getElementById(elementId).value = product[finalValue];
+      }
+    });
+  }
+
+  function checkCurrentOption(custom_products) {
+    const variantSelects = document.querySelector('variant-selects');
+    const currentValues = Array.from(variantSelects.querySelectorAll('select option[selected], fieldset input:checked')).map(el => el.value);
+    const compareValue = currentValues[1]; // optionNumber - 1, where optionNumber is 2
+    const finalValue = sanitizeSelectorName(compareValue);
+
+    updateProductMeasurements(custom_products, finalValue);
+  }
+
+  function fetchCSVData() {
+    fetch(CSV_URL)
+      .then(response => response.text())
+      .then(csvText => {
+        console.log("CSV Data:", csvText);
+        const products = parseCSV(csvText);
+        console.log("product data:", products);
+        checkCurrentOption(products);
+      })
+      .catch(error => {
+        console.error("Error fetching or parsing CSV:", error);
+      });
+  }
+
+  // Event Listeners
+  document.addEventListener('DOMContentLoaded', () => {
+    document.getElementById('showSize').addEventListener('click', toggleFormContainer);
+    fetchCSVData();
+    document.querySelector(".product-variant-id").addEventListener('change', fetchCSVData);
+  });
 </script>
