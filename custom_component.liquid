@@ -109,7 +109,7 @@
       margin-left : 5px;
       margin-right : 5px;
     }
-    }
+    
     .disable_input {
       display: none;
     }
@@ -153,12 +153,18 @@
 <script>
   const CSV_URL = "https://cdn.shopify.com/s/files/1/0902/3514/2463/files/product_size_data_duplicate.csv?v=1726481736";
 
+  // Cache object for memoization
+  const cache = {
+    csvData: null,
+    lastFetch: null
+  };
+
   // Utility Functions
   function sanitizeSelectorName(name) {
     return name.replace(/[^a-zA-Z0-9_-]/g, '-')
-                .replace(/^-+|-+$/g, '')
-                .replace(/\s+/g, '-')
-                .toUpperCase();
+      .replace(/^-+|-+$/g, '')
+      .replace(/\s+/g, '-')
+      .toUpperCase();
   }
 
   function toggleFormContainer() {
@@ -167,9 +173,16 @@
     const isDisabled = formContainer.classList.toggle('disable_input');
     showSizeButton.classList.toggle('change_btn', !isDisabled);
 
+    // Toggle form input attributes
+    const inputs = formContainer.querySelectorAll('input');
+    inputs.forEach(input => {
+      if (!isDisabled) {
+        input.setAttribute('form', document.querySelector('form[action="/cart/add"]').id);
+      } else {
+        input.removeAttribute('form');
+      }
+    });
   }
-
-
 
   function parseCSV(csvText) {
     const rows = csvText.split("\n");
@@ -194,7 +207,6 @@
       'Hip': 'hips',
       'Chest': 'chest'
     };
-
     products.slice(0, -1).forEach(product => {
       const elementId = measurementMap[product.body_measurement];
       if (elementId) {
@@ -208,28 +220,58 @@
     const currentValues = Array.from(variantSelects.querySelectorAll('select option[selected], fieldset input:checked')).map(el => el.value);
     const compareValue = currentValues[1]; // optionNumber - 1, where optionNumber is 2
     const finalValue = sanitizeSelectorName(compareValue);
-
     updateProductMeasurements(custom_products, finalValue);
   }
 
   function fetchCSVData() {
-    fetch(CSV_URL)
+    // Check if we have cached data and it's less than 1 hour old
+    const now = Date.now();
+    if (cache.csvData && cache.lastFetch && (now - cache.lastFetch < 3600000)) {
+      console.log("Using cached CSV data");
+      return Promise.resolve(cache.csvData);
+    }
+
+    console.log("Fetching fresh CSV data");
+    return fetch(CSV_URL)
       .then(response => response.text())
       .then(csvText => {
         console.log("CSV Data:", csvText);
         const products = parseCSV(csvText);
+
+        // Update cache
+        cache.csvData = products;
+        cache.lastFetch = now;
+
+        return products;
+      })
+      .catch(error => {
+        console.error("Error fetching or parsing CSV:", error);
+        throw error;
+      });
+  }
+
+  function handleProductUpdate() {
+    fetchCSVData()
+      .then(products => {
         console.log("product data:", products);
         checkCurrentOption(products);
       })
       .catch(error => {
-        console.error("Error fetching or parsing CSV:", error);
+        console.error("Error handling product update:", error);
       });
   }
 
   // Event Listeners
   document.addEventListener('DOMContentLoaded', () => {
-    document.getElementById('showSize').addEventListener('click', toggleFormContainer);
-    fetchCSVData();
-    document.querySelector(".product-variant-id").addEventListener('change', fetchCSVData);
+    const showSizeButton = document.getElementById('showSize');
+    showSizeButton.addEventListener('click', toggleFormContainer);
+
+    // Initialize form inputs
+    const formContainer = document.getElementById("input_data");
+    const inputs = formContainer.querySelectorAll('input');
+    inputs.forEach(input => input.removeAttribute('form'));
+
+    handleProductUpdate();
+    document.querySelector(".product-variant-id").addEventListener('change', handleProductUpdate);
   });
 </script>
