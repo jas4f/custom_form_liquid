@@ -1,4 +1,6 @@
-<button id="showSize" class="btn btn--primary btn--large ">Customize</button>
+<button id="showSize" class="btn btn--primary btn--large ">
+  <span>Customize</span><span id="change_sign">+</span>
+</button>
 
 <div id="input_data" class="shoulder-custom2 disable_input">
   <style>
@@ -8,10 +10,7 @@
   </style>
 
   <div class="one_input_label ">
-    <label class="form__label custom custom_label" for="shoulder"
-      >Shoulder<br>
-      <span>(in Inches)</span></label
-    >
+    <label class="form__label custom custom_label" for="shoulder">Shoulder</label>
     <div class="field custom">
       <input
         class="field__input"
@@ -23,26 +22,20 @@
     </div>
   </div>
   <div class="one_input_label">
-    <label class="form__label custom custom_label" for="wrist"
-      >Wrist <br>
-      (in Inches)</label
-    >
+    <label class="form__label custom custom_label" for="waist">Waist</label>
     <div class="field custom">
       <input
         class="field__input"
         form="{{ 'product-form-' | append: section.id }}"
         type="number"
-        id="wrist"
-        name="properties[Wrist (in Inches)]"
+        id="waist"
+        name="properties[Waist (in Inches)]"
       >
     </div>
   </div>
 
   <div class="one_input_label">
-    <label class="form__label custom custom_label" for="hips"
-      >Hips <br>
-      (in Inches)</label
-    >
+    <label class="form__label custom custom_label" for="hips">Hips</label>
     <div class="field custom">
       <input
         class="field__input"
@@ -55,10 +48,7 @@
   </div>
 
   <div class="one_input_label">
-    <label class="form__label custom custom_label" for="chest"
-      >Chest <br>
-      (in Inches)</label
-    >
+    <label class="form__label custom custom_label" for="chest">Chest</label>
     <div class="field custom">
       <input
         class="field__input"
@@ -69,6 +59,7 @@
       >
     </div>
   </div>
+  <p>Note : Above all measurements are in inches</p>
   <div class="additional_block">
     <label class="form__label custom custom_label" for="message">Additional Note : </label>
     <div class="field custom additonal_message_design">
@@ -84,26 +75,29 @@
 </div>
 
 <style>
-    #showSize{
-     padding : 12px;
-     margin : 0px;
-    background-color : white;
-     border-radius : 4px;
-     border : 2px solid #402f2d;
-     cursor : pointer;
-    }
-    #showSize:hover{
-      background-color :  #402f2d;
-      color : white;
-    }
+  #showSize {
+    background-color: rgba(158, 133, 133, 0.48);
+    color: #581a27;
+    margin-top: 12px;
+    padding: 8px !important;
+    font-size: 12px;
+    display: flex;
+    justify-content: space-between;
+    width: 40%;
+    border: 2px solid;
+    font-size: 13px;
+    border-radius: 5px;
+    margin: 0px;
+
+  }
 
 
-    .additonal_message_design{
-   border: 2px solid black;
+  .additonal_message_design {
+    border: 2px solid black;
     height: 150%;
     width: 98% !important;
     margin-left: 4px
-    }
+  }
 
     .additional_block{
       margin-left : 5px;
@@ -134,20 +128,24 @@
       margin-top : 0px;
     }
 
-    .field{
-      height : 80%;
-       width : 60%;
-    }
-    #input_data{
-  border: 2px solid #402f2d;
-      padding: 17px 5px;
-      margin-top: 4px;
-      border-radius: 5px;
-    }
-    .change_btn{
-      background-color : #402f2d !important;
-      color : white !important;
-    }
+   .field{
+    height : 80%;
+     width : 60%;
+   }
+
+  #input_data {
+    border: 2px solid #402f2d;
+    padding: 17px 5px;
+    margin-top: 0px;
+    border-radius: 5px;
+  }
+
+  .change_btn {
+    background: #c89a44 !important;
+    border-radius: 10px;
+    color: #581a27 !important;
+    border: 2px solid #581a27 !important;
+  }
 </style>
 
 <script>
@@ -168,20 +166,17 @@
   }
 
   function toggleFormContainer() {
+    if (document.getElementById('change_sign').innerHTML === '+') {
+      document.getElementById('change_sign').innerHTML = '-';
+    }
+    else if (document.getElementById('change_sign').innerHTML === '-') {
+      document.getElementById('change_sign').innerHTML = '+';
+    }
     const formContainer = document.getElementById("input_data");
     const showSizeButton = document.getElementById('showSize');
     const isDisabled = formContainer.classList.toggle('disable_input');
     showSizeButton.classList.toggle('change_btn', !isDisabled);
 
-    // Toggle form input attributes
-    const inputs = formContainer.querySelectorAll('input');
-    inputs.forEach(input => {
-      if (!isDisabled) {
-        input.setAttribute('form', document.querySelector('form[action="/cart/add"]').id);
-      } else {
-        input.removeAttribute('form');
-      }
-    });
   }
 
   function parseCSV(csvText) {
@@ -203,7 +198,7 @@
   function updateProductMeasurements(products, finalValue) {
     const measurementMap = {
       'Shoulder': 'shoulder',
-      'Waist': 'wrist',
+      'Waist': 'waist',
       'Hip': 'hips',
       'Chest': 'chest'
     };
@@ -269,7 +264,7 @@
     // Initialize form inputs
     const formContainer = document.getElementById("input_data");
     const inputs = formContainer.querySelectorAll('input');
-    inputs.forEach(input => input.removeAttribute('form'));
+
 
     handleProductUpdate();
     document.querySelector(".product-variant-id").addEventListener('change', handleProductUpdate);
