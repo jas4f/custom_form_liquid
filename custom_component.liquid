@@ -72,9 +72,25 @@
       >
     </div>
   </div>
+  <div class="saved_mesurement">
+    <button type="button" id="saveMeasurements">Apply</button>
+  </div>
 </div>
 
 <style>
+   #saveMeasurements{
+      width: 96% !important;
+      margin-top: 5px !important;
+      margin: auto !important;
+      display: block !important;
+      background-color: #591b28 !important;
+      margin-top: 10px !important;
+      color: #c89a44 !important;
+  }
+  #saveMeasurements:hover{
+    color : #591b28 !important;
+    background-color :  #c89a44 !important;
+  }
   #showSize {
     background-color: rgba(158, 133, 133, 0.48);
     color: #581a27;
@@ -90,7 +106,7 @@
     margin: 0px;
 
   }
-
+  
 
   .additonal_message_design {
     border: 2px solid black;
@@ -149,124 +165,349 @@
 </style>
 
 <script>
-  const CSV_URL = "https://cdn.shopify.com/s/files/1/0902/3514/2463/files/product_size_data_duplicate.csv?v=1726481736";
-
-  // Cache object for memoization
-  const cache = {
-    csvData: null,
-    lastFetch: null
-  };
-
-  // Utility Functions
-  function sanitizeSelectorName(name) {
-    return name.replace(/[^a-zA-Z0-9_-]/g, '-')
-      .replace(/^-+|-+$/g, '')
-      .replace(/\s+/g, '-')
-      .toUpperCase();
+const CONFIG = {
+  COOKIE_EXPIRY_DAYS: 365,
+  CSV_URL: "https://cdn.shopify.com/s/files/1/0682/0167/7012/files/product_size_data_duplicate.csv?v=1727332575",
+  CACHE_DURATION: 3600000, // 1 hour in milliseconds
+  MEASUREMENT_MAP: {
+    'Shoulder': 'shoulder',
+    'Waist': 'waist',
+    'Hip': 'hips',
+    'Chest': 'chest'
+  },
+  COOKIE_NAMES: {
+    shoulder: 'my_size_shoulder',
+    waist: 'my_size_waist',
+    chest: 'my_size_chest',
+    hips: 'my_size_hips'
   }
+};
 
-  function toggleFormContainer() {
-    if (document.getElementById('change_sign').innerHTML === '+') {
-      document.getElementById('change_sign').innerHTML = '-';
-    }
-    else if (document.getElementById('change_sign').innerHTML === '-') {
-      document.getElementById('change_sign').innerHTML = '+';
-    }
-    const formContainer = document.getElementById("input_data");
-    const showSizeButton = document.getElementById('showSize');
-    const isDisabled = formContainer.classList.toggle('disable_input');
-    showSizeButton.classList.toggle('change_btn', !isDisabled);
+// Cache management
+let cache = {
+  csvData: null,
+  lastFetch: null
+};
 
+// State management
+let temporaryMessageElement = null;
+const prevValues = new Map();
+
+// Cookie Management Functions
+function setCookie(name, value, days = CONFIG.COOKIE_EXPIRY_DAYS) {
+  const date = new Date();
+  date.setTime(date.getTime() + (days * 24 * 60 * 60 * 1000));
+  const expires = `; expires=${date.toUTCString()}`;
+  document.cookie = `${name}=${value}${expires}; path=/`;
+}
+
+function getCookie(name) {
+  const nameEQ = `${name}=`;
+  const cookies = document.cookie.split(';');
+  for (let cookie of cookies) {
+    cookie = cookie.trim();
+    if (cookie.startsWith(nameEQ)) {
+      return cookie.substring(nameEQ.length);
+    }
   }
+  return null;
+}
 
-  function parseCSV(csvText) {
-    const rows = csvText.split("\n");
-    const headers = rows[0].split(",");
-    return rows.slice(1).map(row => {
-      const values = row.split(",");
-      const obj = {};
-      headers.slice(1).forEach((header, index) => {
-        obj[header] = values[index + 1];
-      });
-      return {
-        body_measurement: values[0],
-        ...obj
-      };
+function deleteCookie(name) {
+  document.cookie = name + '=; Max-Age=0; path=/; domain=' + location.host;
+}
+
+function isCookiesExist() {
+  return Object.values(CONFIG.COOKIE_NAMES).every(cookieName => getCookie(cookieName));
+}
+
+// Data Management Functions
+function isCacheValid() {
+  return cache.csvData && 
+         cache.lastFetch && 
+         (Date.now() - cache.lastFetch < CONFIG.CACHE_DURATION);
+}
+
+function updateCache(data) {
+  cache.csvData = data;
+  cache.lastFetch = Date.now();
+}
+
+function sanitizeSelectorName(name) {
+  return name.replace(/[^a-zA-Z0-9_-]/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .replace(/\s+/g, '-')
+    .toUpperCase();
+}
+
+function parseCSV(csvText) {
+  const rows = csvText.split("\r\n");
+  const headers = rows[0].split(",");
+  return rows.slice(1).map(row => {
+    const values = row.split(",");
+    const obj = {};
+    headers.slice(1).forEach((header, index) => {
+      obj[header] = values[index + 1];
     });
+    return { body_measurement: values[0], ...obj };
+  });
+}
+
+async function fetchCSVData() {
+  if (isCacheValid()) {
+    return cache.csvData;
   }
 
-  function updateProductMeasurements(products, finalValue) {
-    const measurementMap = {
-      'Shoulder': 'shoulder',
-      'Waist': 'waist',
-      'Hip': 'hips',
-      'Chest': 'chest'
-    };
+  try {
+    const response = await fetch(CONFIG.CSV_URL);
+    const csvText = await response.text();
+    const products = parseCSV(csvText);
+    updateCache(products);
+    return products;
+  } catch (error) {
+    console.error("Error fetching or parsing CSV:", error);
+    throw error;
+  }
+}
+
+// UI Management Functions
+function addTemporaryMessage(message, measurementChangesCount, duration = 3000) {
+  const container = document.getElementById("input_data");
+  if (!container) {
+    console.error("Container with ID 'input_data' not found.");
+    return;
+  }
+
+  if (temporaryMessageElement) {
+    temporaryMessageElement.remove();
+  }
+
+  const messageElement = document.createElement("div");
+  messageElement.textContent = message;
+  messageElement.style.padding = "10px";
+  messageElement.style.color = measurementChangesCount === 0 ? "red" : "green";
+  container.appendChild(messageElement);
+  temporaryMessageElement = messageElement;
+}
+
+function toggleFormContainer(event) {
+  event.preventDefault();
+  
+  if (temporaryMessageElement) {
+    temporaryMessageElement.remove();
+    temporaryMessageElement = null;
+  }
+
+  const sign = document.getElementById('change_sign');
+  sign.textContent = sign.textContent === '+' ? '-' : '+';
+
+  const formContainer = document.getElementById("input_data");
+  const showSizeButton = document.getElementById('showSize');
+  const isDisabled = formContainer.classList.toggle('disable_input');
+  showSizeButton.classList.toggle('change_btn', !isDisabled);
+}
+
+function updateCustomClass() {
+  const customElements = document.querySelectorAll("[data-value='Custom']");
+  customElements.forEach(element => {
+    if (isCookiesExist()) {
+      element.classList.remove('custom_class');
+    } else {
+      element.classList.add('custom_class');
+    }
+  });
+}
+
+function updateInputValues(values) {
+  Object.entries(values).forEach(([id, value]) => {
+    const element = document.getElementById(id);
+    if (element) {
+      element.value = value;
+    }
+  });
+}
+
+// Measurement Management Functions
+function saveAllMeasurements(measurements) {
+  Object.entries(measurements).forEach(([key, value]) => {
+    setCookie(CONFIG.COOKIE_NAMES[key], value);
+  });
+}
+
+function setInputAttributes(shouldHaveAttributes) {
+  Object.values(CONFIG.MEASUREMENT_MAP).forEach(id => {
+    const element = document.getElementById(id);
+    if (element) {
+      if (shouldHaveAttributes) {
+        const measurementType = Object.entries(CONFIG.MEASUREMENT_MAP)
+          .find(([_, value]) => value === id)[0];
+        element.setAttribute('name', `properties[${measurementType}(in Inches)]`);
+      } else {
+        element.removeAttribute('name');
+        prevValues.set(id, element.value);
+      }
+    }
+  });
+}
+
+function isMeasurementsChanged(currentVal, prevId) {
+  return currentVal !== prevValues[prevId];
+}
+
+// Product Update Functions
+async function handleProductUpdate() {
+  try {
+    
+  if (temporaryMessageElement) {
+    temporaryMessageElement.remove();
+    temporaryMessageElement = null;
+  }
+
+    const variantSelects = document.querySelectorAll('.t4s-swatch__item.is--selected');
+    const compareValue = variantSelects[0].innerText;
+    
+    const currentValue = document.querySelector('#changed_current');
+    if (compareValue === 'Custom' || compareValue.includes('My Size')) {
+      currentValue.removeAttribute("data-current-value");    
+      currentValue.textContent = "My Size";
+    } else {
+      currentValue.setAttribute("data-current-value", "");
+    }
+    
+    const products = await fetchCSVData();
+    updateMeasurements(products);
+  } catch (error) {
+    console.error("Error handling product update:", error);
+  }
+}
+
+function updateMeasurements(products) {
+  const variantSelects = document.querySelectorAll('.t4s-swatch__item.is--selected');
+  const compareValue = variantSelects[0].innerText;
+  const finalValue = sanitizeSelectorName(compareValue);
+ 
+  if (finalValue.includes('MY-SIZE')) {
+    const measurements = {};
+    Object.values(CONFIG.MEASUREMENT_MAP).forEach(id => {
+      measurements[id] = getCookie(CONFIG.COOKIE_NAMES[id]);
+    });
+    updateInputValues(measurements);
+    setInputAttributes(true);
+  } else {
+    const measurements = {};
     products.slice(0, -1).forEach(product => {
-      const elementId = measurementMap[product.body_measurement];
+      const elementId = CONFIG.MEASUREMENT_MAP[product.body_measurement];
       if (elementId) {
-        document.getElementById(elementId).value = product[finalValue];
+        measurements[elementId] = product[finalValue];
+        prevValues[elementId] = product[finalValue];
+      }
+    });
+    updateInputValues(measurements);
+    setInputAttributes(false);
+  }
+}
+
+// Option Management Functions
+function updateOptionName() {
+  const sizeElements = document.querySelectorAll('.t4s-swatch__list .t4s-swatch__item');
+  sizeElements.forEach(element => {
+    if (element.textContent.trim() === 'Custom' || element.textContent.trim().includes('My Size')) {
+      const valueExtra = getCookie('currentSize');
+      element.textContent = `My Size (${valueExtra})`;
+    }
+  });
+}
+
+function selectMySizeOption() {
+  const sizeContainer = document.querySelector('.is-t4s-name__size');
+  if (sizeContainer && sizeContainer.querySelector('.t4s-swatch__title span').textContent.includes("Size")) {
+    const sizeOptions = sizeContainer.querySelectorAll('.t4s-swatch__item');
+    sizeOptions.forEach(option => {
+      if (option.dataset.value === "Custom") {
+        sizeOptions.forEach(opt => opt.classList.remove('is--selected'));
+        option.classList.add('is--selected');
       }
     });
   }
 
-  function checkCurrentOption(custom_products) {
-    const variantSelects = document.querySelector('variant-selects');
-    const currentValues = Array.from(variantSelects.querySelectorAll('select option[selected], fieldset input:checked')).map(el => el.value);
-    const compareValue = currentValues[1]; // optionNumber - 1, where optionNumber is 2
-    const finalValue = sanitizeSelectorName(compareValue);
-    updateProductMeasurements(custom_products, finalValue);
-  }
-
-  function fetchCSVData() {
-    // Check if we have cached data and it's less than 1 hour old
-    const now = Date.now();
-    if (cache.csvData && cache.lastFetch && (now - cache.lastFetch < 3600000)) {
-      console.log("Using cached CSV data");
-      return Promise.resolve(cache.csvData);
+  const selectElement = document.querySelector(".t4s-product__select");
+  for (let option of selectElement.options) {
+    if (option.textContent.includes("Custom")) {
+      option.selected = true;
+      break;
     }
-
-    console.log("Fetching fresh CSV data");
-    return fetch(CSV_URL)
-      .then(response => response.text())
-      .then(csvText => {
-        console.log("CSV Data:", csvText);
-        const products = parseCSV(csvText);
-
-        // Update cache
-        cache.csvData = products;
-        cache.lastFetch = now;
-
-        return products;
-      })
-      .catch(error => {
-        console.error("Error fetching or parsing CSV:", error);
-        throw error;
-      });
   }
 
-  function handleProductUpdate() {
-    fetchCSVData()
-      .then(products => {
-        console.log("product data:", products);
-        checkCurrentOption(products);
-      })
-      .catch(error => {
-        console.error("Error handling product update:", error);
-      });
+  if (temporaryMessageElement) {
+    temporaryMessageElement.remove();
+    temporaryMessageElement = null;
   }
 
-  // Event Listeners
-  document.addEventListener('DOMContentLoaded', () => {
-    const showSizeButton = document.getElementById('showSize');
-    showSizeButton.addEventListener('click', toggleFormContainer);
+  closedCustomizedForm();
+}
 
-    // Initialize form inputs
-    const formContainer = document.getElementById("input_data");
-    const inputs = formContainer.querySelectorAll('input');
+function closedCustomizedForm() {
+  const sign = document.getElementById('change_sign');
+  sign.textContent = sign.textContent === '+' ? '-' : '+';
 
+  const formContainer = document.getElementById("input_data");
+  const showSizeButton = document.getElementById('showSize');
+  const isDisabled = formContainer.classList.toggle('disable_input');
+  showSizeButton.classList.toggle('change_btn', !isDisabled);
+}
 
-    handleProductUpdate();
-    document.querySelector(".product-variant-id").addEventListener('change', handleProductUpdate);
+// Main Measurement Handler
+function handleMeasurements(currentSize) {
+  deleteCookie('currentSize');
+  setCookie('currentSize', currentSize);
+  let measurementChangesCount = 0;
+
+  updateCustomClass();
+  
+  Object.values(CONFIG.MEASUREMENT_MAP).forEach(id => {
+    const element = document.getElementById(id);
+    if (isMeasurementsChanged(element.value, id)) {
+      measurementChangesCount++;
+    }
   });
+
+  if (measurementChangesCount === 0) {
+    addTemporaryMessage("No changes are observed in the above measurements", measurementChangesCount);
+  } else {
+    const measurements = {};
+    Object.values(CONFIG.MEASUREMENT_MAP).forEach(id => {
+      measurements[id] = document.getElementById(id).value;
+    });
+    saveAllMeasurements(measurements);
+    addTemporaryMessage("Measurements saved successfully!", measurementChangesCount);
+    updateCustomClass();
+    selectMySizeOption();
+    handleProductUpdate();
+    updateOptionName();
+  }
+}
+
+// Event Listeners
+document.addEventListener('DOMContentLoaded', () => {
+  if (isCookiesExist()) {
+    updateCustomClass();
+    updateOptionName();
+  }
+  
+  const showSizeButton = document.getElementById('showSize');
+  showSizeButton.addEventListener('click', toggleFormContainer);
+  
+  document.getElementById('saveMeasurements').addEventListener('click', () => {
+    const variantSelects = document.querySelectorAll('.t4s-swatch__item.is--selected');
+    const currentSize = variantSelects[0].innerText;
+    if (currentSize.includes('My Size')) {
+      const val = getCookie('currentSize');
+      handleMeasurements(val);
+    } else {
+      handleMeasurements(currentSize);
+    }
+  });
+
+  document.querySelector(".t4s-product__select").addEventListener('change', handleProductUpdate);
+});
 </script>
